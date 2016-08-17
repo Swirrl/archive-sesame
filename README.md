@@ -3,7 +3,10 @@
 This project contains a crude shell script to generate historical
 Javadocs.
 
-# License
+# Script License
+
+The docs themselves are Copyrighted under the RDF4j and Sesame
+projects.
 
 Copyright © 2016 Swirrl IT Ltd.
 
