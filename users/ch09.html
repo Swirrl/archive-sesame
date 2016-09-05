@@ -1,0 +1,157 @@
+<html><head>
+      <meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
+   <title>Chapter&nbsp;9.&nbsp;Parsing/Writing RDF with Rio</title><link rel="stylesheet" href="openrdf.css" type="text/css"><meta name="generator" content="DocBook XSL Stylesheets V1.68.1"><link rel="start" href="index.html" title="User Guide for Sesame 2.7"><link rel="up" href="index.html" title="User Guide for Sesame 2.7"><link rel="prev" href="ch08.html" title="Chapter&nbsp;8.&nbsp;Basic Programming with Sesame"><link rel="next" href="ch10.html" title="Chapter&nbsp;10.&nbsp;HTTP communication protocol for Sesame 2"></head><body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF"><div class="navheader"><table width="100%" summary="Navigation header"><tr><th colspan="3" align="center">Chapter&nbsp;9.&nbsp;Parsing/Writing RDF with Rio</th></tr><tr><td width="20%" align="left"><a accesskey="p" href="ch08.html">Prev</a>&nbsp;</td><th width="60%" align="center">&nbsp;</th><td width="20%" align="right">&nbsp;<a accesskey="n" href="ch10.html">Next</a></td></tr></table><hr></div><div class="chapter" lang="en"><div class="titlepage"><div><div><h2 class="title"><a name="chapter-rio"></a>Chapter&nbsp;9.&nbsp;Parsing/Writing RDF with Rio</h2></div></div></div><div class="toc"><p><b>Table of Contents</b></p><dl><dt><span class="section"><a href="ch09.html#d0e1511">9.1. Listening to the parser</a></span></dt><dt><span class="section"><a href="ch09.html#d0e1555">9.2. Parsing a file and collecting all triples</a></span></dt><dt><span class="section"><a href="ch09.html#d0e1606">9.3. Using your own RDFHandler: counting statements</a></span></dt><dt><span class="section"><a href="ch09.html#d0e1622">9.4. Writing RDF</a></span></dt><dt><span class="section"><a href="ch09.html#d0e1658">9.5. Detecting the file format</a></span></dt></dl></div><p>
+	 The Sesame framework includes a set of parsers and writers called Rio (see <a href="http://www.openrdf.org/doc/sesame2/api/org/openrdf/rio/package-summary.html" target="_top">Rio Javadoc</a>). Rio (a rather imaginative acronym for &#8220;RDF I/O&#8221;) is a toolkit that can be used independently from the rest of Sesame. In this chapter, we will take a look at various ways to use Rio to parse from or write to an RDF document. We will show how to do a simple parse and collect the results, how to count the number of triples in a file, how to convert a file from one syntax format to another, and how to dynamically create a parser for the correct syntax format.
+  </p><p>
+	 If you use Sesame via the Repository API (see <a href="ch08.html" title="Chapter&nbsp;8.&nbsp;Basic Programming with Sesame">Chapter&nbsp;8, <i>Basic Programming with Sesame</i></a>), then typically you will not need to
+	 use the parsers directly: you simply supply the document (either via a URL,
+	 or as a File, InputStream or Reader object) to the
+	 <code class="classname">RepositoryConnection</code> and the parsing is all handled
+	 internally. However, sometimes you may want to parse an RDF document
+	 without immediately storing it in a triplestore. For those cases, you can
+	 use Rio directly.
+  </p><div class="section" lang="en"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a name="d0e1511"></a>9.1.&nbsp;Listening to the parser</h2></div></div></div><p>
+		The Rio parsers all work with a set of Listener interfaces that they
+		report results to: <code class="classname">ParseErrorListener</code>,
+		<code class="classname">ParseLocationListener</code>, and
+		<code class="classname">RDFHandler</code>. Of these three,
+		<code class="classname">RDFHandler</code> is the most useful one: this is the
+		listener that receives parsed RDF triples. So we will concentrate on this
+		interface here.
+	 </p><p>
+		The <a href="http://www.openrdf.org/doc/sesame2/api/org/openrdf/rio/RDFHandler.html" target="_top"><code class="classname">RDFHandler</code></a> interface is quite simple, it contains just five
+		methods: <code class="function">startRDF</code>, <code class="function">handleNamespace</code>, <code class="function">handleComment</code>, <code class="function">handleStatement</code>, and
+			 <code class="function">endRDF</code>. Rio also provides a number of default implementations of RDFHandler,
+			 such as <a href="http://www.openrdf.org/doc/sesame2/api/index.html?org/openrdf/rio/helpers/StatementCollector.html" target="_top">StatementCollector</a>, which stores all
+  received RDF triples in a Java Collection. Depending on what you want to do
+  with parsed statements, you can either reuse one of the existing <code class="classname">RDFHandlers</code>,
+  or, if you have a specific task in mind, you can simply write your own
+  implementation of RDFHandler. Here, I will show you some simple examples of
+  things you can do with RDFHandlers.
+</p></div><div class="section" lang="en"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a name="d0e1555"></a>9.2.&nbsp;Parsing a file and collecting all triples</h2></div></div></div><p>
+		As a simple example of how to use Rio, we parse an RDF document and collect all the parsed statements in a Java Collection object (specifically, in a <a href="http://www.openrdf.org/doc/sesame2/api/index.html?org/openrdf/model/Graph.html" target="_top">Graph</a> object).
+	 </p><p>
+		Let&#8217;s say we have a Turtle file, available at <code class="filename">http://example.org/example.ttl</code>:
+	 </p><pre class="programlisting">
+java.net.URL documentUrl = new URL(&#8220;http://example.org/example.ttl&#8221;);
+InputStream inputStream = documentUrl.openStream();</pre><p>
+  We now have an open InputStream to our RDF file. Now we need a RDFParser object that reads this InputStream and creates RDF statements out of it. Since we are reading a Turtle file, we create a RDFParser object for the <code class="classname">RDFFormat.TURTLE</code> syntax format:
+</p><pre class="programlisting">
+RDFParser rdfParser = Rio.createParser(RDFFormat.TURTLE);</pre><p>
+	 (note: all Rio classes and interfaces are in package org.openrdf.rio  or one of its subpackages)
+  </p><p>
+	 We also need an RDFHandler which can receive RDF statements from the parser. Since we just want to create a collection of Statements for now, we&#8217;ll just use Rio&#8217;s StatementCollector:
+  </p><pre class="programlisting">
+org.openrdf.model.Graph myGraph = new org.openrdf.model.impl.GraphImpl();
+StatementCollector collector = new StatementCollector(myGraph);
+rdfParser.setRDFHandler(collector);</pre><p>
+  Note, by the way, that you can use any collection class (such as <code class="classname">java.util.ArrayList</code> or <code class="classname">java.util.HashSet</code>) in place of the <code class="classname">Graph</code> object.
+</p><p>
+  Finally, we need to set the parser to work:
+</p><pre class="programlisting">
+try {
+   rdfParser.parse(inputStream, documentURL.toString());
+}
+catch (IOException e) {
+  // handle IO problems (e.g. the file could not be read)
+}
+catch (RDFParseException e) {
+  // handle unrecoverable parse error
+}
+catch (RDFHandlerException e) {
+  // handle a problem encountered by the RDFHandler
+}</pre><p>
+  After the <code class="function">parse()</code> method has executed (and provided no exception has occurred), the collection <code class="classname">myGraph</code> will be filled by the StatementCollector. As an aside: you do not have to provide the StatementCollector with a list in advance, you can also use an empty constructor and then just get the collection, using StatementCollector.getStatements() .
+</p></div><div class="section" lang="en"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a name="d0e1606"></a>9.3.&nbsp;Using your own RDFHandler: counting statements</h2></div></div></div><p>
+  Suppose you want to count the number of triples in an RDF file. You could of
+  course use the code from the previous section, adding all triples to a Collection, and then
+  just checking the size of that Collection. However, this will get you into trouble
+  when you are parsing very large RDF files: you might run out of memory. And
+  in any case: creating and storing all these Statement objects just to be able
+  to count them seems a bit of a waste. So instead, we will create our own
+  RDFHandler, which just counts the parsed RDF statements and then immediately
+  throws them away. 
+</p><p>
+  To create your own RDFHandler implementation, you can of course create a class that implements the RDFHandler interface, but a useful shortcut is to instead create a subclass of <a href="http://www.openrdf.org/doc/sesame2/api/index.html?org/openrdf/rio/helpers/RDFHandlerBase.html" target="_top">RDFHandlerBase</a>. This is a base class that provides dummy implementations of all interface methods. The advantage is that you only have to override the methods in which you need to do something. Since what we want to do is just count statements, we only need to override the handleStatement method. Additionaly, we of course need a way to get back the total number of statements found by our counter:
+</p><pre class="programlisting">
+class StatementCounter extends RDFHandlerBase {
+ 
+  private int countedStatements = 0;
+ 
+  @Override
+  public void handleStatement(Statement st) {
+     countedStatements++;
+  }
+ 
+ public int getCountedStatements() {
+   return countedStatements;
+ }
+ }</pre><p>
+Once we have our custom RDFHandler class, we can supply that to the parser
+instead of the StatementCollector:
+ </p><pre class="programlisting">
+StatementCounter myCounter = new StatementCounter();
+rdfParser.setRDFHandler(myCounter);
+try {
+   rdfParser.parse(inputStream, documentURL.toString());
+}
+catch (Exception e) {
+  // oh no!
+}
+int numberOfStatements = myCounter.getCountedStatements();</pre></div><div class="section" lang="en"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a name="d0e1622"></a>9.4.&nbsp;Writing RDF</h2></div></div></div><p>
+	 Sofar, we've seen how to read RDF, but Rio of course also allows you to write RDF, using <a href="http://www.openrdf.org/doc/sesame2/api/index.html?org/openrdf/rio/RDFWriter.html" target="_top">RDFWriter</a>s, which are a subclass of <code class="classname">RDFHandler</code> that is intended for writing RDF in a specific syntax format.
+  </p><p>
+	 As an example, we start with a <code class="classname">Graph</code> containing several RDF statements, and we want to write these statements to a file. In this example, we'll write our statements to a file in RDF/XML syntax:
+  </p><pre class="programlisting">
+Graph myGraph; // a collection of several RDF statements
+FileOutputStream out = new FileOutputStream("/path/to/file.rdf");
+RDFWriter writer = Rio.createWriter(RDFFormat.RDFXML, out);
+try {
+  writer.startRDF();
+  for (Statement st: myGraph) {
+	 writer.handleStatement(st);
+  }
+  writer.endRDF();
+}
+catch (RDFHandlerException e) {
+ // oh no, do something!
+}</pre><p>
+	 Since we have now seen how to read RDF using a parser and how to write using a writer, we can now convert RDF files from one syntax to another, simply by using a parser for the input syntax, collecting the statements, and then writing them again using a writer for the intended output syntax. However, you may notice that this approach may be problematic for very large files: we are collecting all statements into main memory (in a <code class="classname">Graph</code> object). 
+  </p><p>
+	 Fortunately, there is a shortcut. We can eliminate the need for using a <code class="classname">Graph</code> altogether. If you've paid attention, you might have spotted it already: RDFWriters are also RDFHandlers. So instead of first using a <code class="classname">StatementCollector</code> to collect our RDF data and then writing that to our RDFWriter, we can simply use the <code class="classname">RDFWriter</code> directly. So if we want to convert our input RDF file from Turtle syntax to RDF/XML syntax, we can do that, like so:
+  </p><pre class="programlisting">
+// open our input document
+java.net.URL documentUrl = new URL(&#8220;http://example.org/example.ttl&#8221;);
+InputStream inputStream = documentUrl.openStream();
+
+// create a parser for Turtle and a writer for RDF/XML 
+RDFParser rdfParser = Rio.createParser(RDFFormat.TURTLE);
+RDFWriter rdfWriter = Rio.createWriter(RDFFormat.RDFXML, 
+                           new FileOutputStream("/path/to/example-output.rdf");
+
+// link our parser to our writer...
+rdfParser.setRDFHandler(rdfWriter);
+
+// ...and start the conversion!
+try {
+   rdfParser.parse(inputStream, documentURL.toString());
+}
+catch (IOException e) {
+  // handle IO problems (e.g. the file could not be read)
+}
+catch (RDFParseException e) {
+  // handle unrecoverable parse error
+}
+catch (RDFHandlerException e) {
+  // handle a problem encountered by the RDFHandler
+}</pre></div><div class="section" lang="en"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a name="d0e1658"></a>9.5.&nbsp;Detecting the file format</h2></div></div></div><p>
+	 In the examples sofar, we have always assumed that you know what the syntax format of your input file is: we assumed Turtle syntax and created a new parser using <code class="classname">RDFFormat.TURTLE</code>. However, you may not always know in advance what exact format the RDF file is in. What then? Fortunately, Rio has a couple of useful features to help you.
+  </p><p>
+	 <a href="http://www.openrdf.org/doc/sesame2/api/index.html?org/openrdf/rio/RDFFormat.html" target="_top">RDFFormat</a> is, as we have seen, a set of constants defining the available syntax formats. However, it also has a couple of utility methods for guessing the correct format, given either a filename or a MIME-type. For example, to get back the RDF format for our Turtle file, we could do the following:
+  </p><pre class="programlisting">
+RDFFormat format = RDFFormat.forFileName(documentURL.toString());</pre><p>
+  This will guess, based on the extension of the file (.ttl) that the file is a Turtle file and return the correct format. We can then use that with the Rio factory class to create the correct parser dynamically:
+</p><pre class="programlisting">
+RDFParser rdfParser = Rio.createParser(format);</pre><p>
+As you can see, we still have the same result: we have created an RDFParser object which we can use to parse our file, but now we have not made the explicit assumption that the input file is in Turtle format: if we would later use the same code with a different file (say, a .owl file &#8211; which is in RDF/XML format), our program would be able to detect the format at runtime and create the correct parser for it.
+</p></div></div><div class="navfooter"><hr><table width="100%" summary="Navigation footer"><tr><td width="40%" align="left"><a accesskey="p" href="ch08.html">Prev</a>&nbsp;</td><td width="20%" align="center">&nbsp;</td><td width="40%" align="right">&nbsp;<a accesskey="n" href="ch10.html">Next</a></td></tr><tr><td width="40%" align="left" valign="top">Chapter&nbsp;8.&nbsp;Basic Programming with Sesame&nbsp;</td><td width="20%" align="center"><a accesskey="h" href="index.html">Home</a></td><td width="40%" align="right" valign="top">&nbsp;Chapter&nbsp;10.&nbsp;HTTP communication protocol for Sesame 2</td></tr></table></div></body></html>
